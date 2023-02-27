@@ -18,7 +18,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = (
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ECHO'] = False
-app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = True
+app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', "it's a secret")
 toolbar = DebugToolbarExtension(app)
 
@@ -181,6 +181,47 @@ def users_followers(user_id):
     return render_template('users/followers.html', user=user)
 
 
+@app.route('/users/add_like/<int:message_id>', methods=["POST"])
+def add_like(message_id):
+    """Add like."""
+
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    message = Message.query.get_or_404(message_id)
+    if message.user_id == g.user.id:
+        flash("Can't like your own warble", "info")
+        return redirect("/")
+
+    liked_message_ids = [l.id for l in g.user.likes]
+    if message_id not in liked_message_ids:
+    # If message not liked, then add message to likes.
+        g.user.likes.append(message)
+        db.session.commit()
+        flash(f"You liked a walble", "info")
+        
+    else:
+    # If message already liked, then unlike it.
+        g.user.likes.remove(message)
+        db.session.commit()
+        flash("You dislike a walble.", "info")
+
+    return redirect("/")
+
+
+@app.route('/users/<int:user_id>/likes')
+def show_likes(user_id):
+    """Show list of people this user is following."""
+
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    user = User.query.get_or_404(user_id)
+    return render_template('users/likes.html', user=user)
+
+
 @app.route('/users/follow/<int:follow_id>', methods=['POST'])
 def add_follow(follow_id):
     """Add a follow for the currently-logged-in user."""
@@ -257,6 +298,7 @@ def delete_user():
     return redirect("/signup")
 
 
+
 ##############################################################################
 # Messages routes:
 
@@ -328,7 +370,9 @@ def homepage():
                     .limit(100)
                     .all())
 
-        return render_template('home.html', messages=messages)
+        likes = [ l.id for l in g.user.likes]
+
+        return render_template('home.html', messages=messages, likes=likes)
 
     else:
         return render_template('home-anon.html')
